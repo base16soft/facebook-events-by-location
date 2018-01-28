@@ -11,12 +11,17 @@ var EventSearch = require("facebook-events-by-location-core");
 // Create the Express object
 var app = express();
 
+// Get real ip if passed by nginx
+morgan.token("remote-addr", function (req) {
+    return req.headers["x-real-ip"] || req.headers["x-forwarded-for"] || req.connection.remoteAddress;
+});
+
 // Use morgan for logging
 app.use(morgan("combined"));
 
 // Set application properties
 app.set("host", process.env.HOST || "0.0.0.0");
-app.set("port", process.env.PORT0 || 3000);
+app.set("port", process.env.PORT || 3000);
 app.set("x-powered-by", false);
 app.set("etag", false);
 
@@ -60,7 +65,7 @@ app.get("/events", cors(corsOptions), function(req, res) {
     if (!req.query.lat || !req.query.lng) {
         res.status(500).json({message: "Please specify the lat and lng parameters!"});
     } else if (!req.query.accessToken && !process.env.FEBL_ACCESS_TOKEN) {
-        res.status(500).json({message: "Please specify an Access Token, either as environment variable odr as accessToken parameter!"});
+        res.status(500).json({message: "Please specify an Access Token, either as environment variable or as accessToken parameter!"});
     } else {
 
         var options = {};
@@ -83,6 +88,17 @@ app.get("/events", cors(corsOptions), function(req, res) {
         if (req.query.query) {
             options.query = req.query.query;
         }
+        if (req.query.categories) {
+            var categories = [];
+            if (req.query.categories.length > 0) {
+                if (req.query.categories.indexOf(",") > -1) {
+                    categories = req.query.categories.split(",");
+                } else {
+                    categories.push(req.query.categories);
+                }
+            }
+            options.categories = categories;
+        }
         if (req.query.sort) {
             options.sort = req.query.sort;
         }
@@ -95,12 +111,15 @@ app.get("/events", cors(corsOptions), function(req, res) {
         if (req.query.until) {
             options.until = req.query.until;
         }
+        if (req.query.showActiveOnly && req.query.showActiveOnly === "false") {
+            options.showActiveOnly = Boolean(req.query.showActiveOnly);
+        }
 
         // Instantiate EventSearch
-        var es = new EventSearch(options);
+        var es = new EventSearch();
 
         // Search and handle results
-        es.search().then(function (events) {
+        es.search(options).then(function (events) {
             res.json(events);
         }).catch(function (error) {
             res.status(500).json(error);

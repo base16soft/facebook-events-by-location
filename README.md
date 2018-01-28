@@ -20,13 +20,12 @@ The implementation of [facebook-events-by-location-core](https://github.com/tobi
 ## Installation
 
 ### As NPM package
-The application can be installed via 
 
-`npm install facebook-events-by-location`
+First, create a new folder: `$ mkdir fb-event-test` (where `fb-event-test` is just an example). 
 
-in the root directory, and either started with 
+Then change to the newly created directory, and do a quick initialization of your new project with `$ cd fb-event-test && npm init --yes`. 
 
-`npm start` or `node index.js`.
+The application can be installed via `$ npm install facebook-events-by-location` and started with `$ node node_modules/facebook-events-by-location/index.js`.
 
 ### Git
 To clone the repository, use
@@ -42,7 +41,7 @@ The service can be launched via Docker like this:
 
 `docker run -d --name fb-event-search -p 3000:3000 tobilg/facebook-event-search`
 
-This would expose the app on port 3000 on the Docker host. If you want to specify another port for the app, you can use `-e "PORT0=10000"` together with `--net="host"` (be aware of the security implications of host networking). 
+This would expose the app on port 3000 on the Docker host. If you want to specify another port for the app, you can use `-e "PORT=10000"` together with `--net="host"` (be aware of the security implications of host networking). 
 
 ## Environment variables
 You can use the following environment variables to influence the application:
@@ -50,10 +49,14 @@ You can use the following environment variables to influence the application:
 * `FEBL_ACCESS_TOKEN`: Used to define a general **App Access Token** to be used for the requests to the Graph API. This is overridden if the request specifies an `accessToken` parameter. If it's not specified, every request to `/events` needs to contain an `accessToken` parameter.
 * `FEBL_CORS_WHITELIST`: You can pass a comma-separated domain whitelist to enable CORS headers (e.g. `http://www.test.com,http://www.test.org`). If you don't specify this variable, CORS will be enabled on all origins.
 * `HOST`: The IP address the Express application should bind to. Default is `0.0.0.0` (all available IP addresses).
-* `PORT0`: The port on which the application should run. Default is `3000`.
+* `PORT`: The port on which the application should run. Default is `3000`.
 
 ## API
 The basic endpoint is `GET /events`, but there's also a `GET /health` endpoint to enable health checks.
+
+### Swagger API docs
+
+The Swagger API docs are available at [http://tobilg.github.io/facebook-events-by-location/](http://tobilg.github.io/facebook-events-by-location/).
 
 ### Query paramenters
 
@@ -65,15 +68,30 @@ Mandatory parameters are the following:
 Non-mandatory parameters
 
 * `query`: The term(s) on which you want to narrow down your *location search* (this only filters the places, not the events itself!).
+* `categories`: The comma-separated list of [place categories](https://developers.facebook.com/docs/places/web/search#categories) that should be searched for. Valid entries are `ARTS_ENTERTAINMENT`, `EDUCATION`, `FITNESS_RECREATION`, `FOOD_BEVERAGE`, `HOTEL_LODGING`, `MEDICAL_HEALTH`, `SHOPPING_RETAIL`, `TRAVEL_TRANSPORTATION`. Default is none.  
 * `accessToken`: The **App Access Token** to be used for the requests to the Graph API.
 * `distance`: The distance in meters (it makes sense to use smaller distances, like max. 2500). Default is `100`.
-* `sort`: The results can be sorted by `time`, `distance`, `venue` or `popularity`. If omitted, the events will be returned in the order they were received from the Graph API.
-* `version`: The version of the Graph API to use. Default is `v2.7`.
+* `sort`: The results can be sorted by `time`, `distance` (legacy option, will be removed in future release), `venueDistance`, `eventDistance`, `venue` or `popularity`. If omitted, the events will be returned in the order they were received from the Graph API.
+* `version`: The version of the Graph API to use. Default is `v2.10`.
 * `since`: The start of the range to filter results. Format is Unix timestamp or `strtotime` data value, as accepted by [FB Graph API](https://developers.facebook.com/docs/graph-api/using-graph-api#time).
 * `until`: The end of the range to filter results.
+* `showActiveOnly`: Whether to show only active (non-draft, non-cancalled Events). Default is `true`, otherwise `false` can be passed to show all Events regardless of their state. 
 
 ### Query results
 The response will be `application/json` and contain an `events` property containing the array of event objects, as well as a `metadata` property with some stats. See below for an example.
+
+#### Location/Place data in the query result
+
+There are two types of locations in the resulting event JSON objects:
+
+* `place`: This is the consolidated Place object from the Venue (which is actually the Page object which was returned from the Place search), and the Event's place data. The latter will supersede the Place page data.
+* `venue.location`: This is the location data of the Page object.
+
+As the Facebook Graph API can only be queried for Places via coordinate/distance, and Events can have their own, "real" location, it's possible that the place data which is found in `place` can be outside the boundaries of the original query. 
+
+Consequences:
+* If you want consistency regarding query vs. results, you should use `venue.location`. 
+* If you want accuracy regarding the real event location, you should use `place`. 
 
 ### Sample call
 
@@ -83,43 +101,70 @@ The response will be `application/json` and contain an `events` property contain
 
 ```javascript
 {
-	"events": [{
-		"id": "163958810691757",
-		"name": "3Bridge Records presents inTRANSIT w/ David Kiss, Deep Woods, Eric Shans",
-		"coverPicture": "https://scontent.xx.fbcdn.net/t31.0-8/s720x720/13679859_10153862492796325_8533542782240254857_o.jpg",
-		"profilePicture": "https://scontent.xx.fbcdn.net/v/t1.0-0/c133.0.200.200/p200x200/13872980_10153862492796325_8533542782240254857_n.jpg?oh=a46813bbf28ad7b8bffb88acd82c7c71&oe=581EF037",
-		"description": "Saturday, August 20th.\n\nJoin the 3Bridge Records team for another night of sound and shenanigans - as we send Deep Woods & David Kiss out to Burning Man & belatedly celebrate Slav Ka's debut release on the label - \"Endless\" - out May 14th, featuring a remix by Mr. Shans.\n\nDavid Kiss (House of Yes)\nhttps://soundcloud.com/davidkiss\n\nDeep Woods (3Bridge Records)\nhttps://soundcloud.com/deep-woods\n\nEric Shans (3Bridge Records)\nhttps://soundcloud.com/eric-shans\n\nSlav Ka (3Bridge Records)\nhttps://soundcloud.com/slinkyslava\n\nFree before 12, $10 after (+ 1 comp well drink). $5 presale available on RA.\n\nhttps://www.residentadvisor.net/event.aspx?863815\n\nStay dope, Brooklyn.",
-		"distance": "203",
-		"startTime": "2016-08-20T22:00:00-0400",
-		"timeFromNow": 481946,
-		"stats": {
-			"attending": 44,
-			"declined": 3,
-			"maybe": 88,
-			"noreply": 1250
-		},
-		"venue": {
-			"id": "585713341444399",
-			"name": "TBA Brooklyn",
-			"coverPicture": "https://scontent.xx.fbcdn.net/v/t1.0-9/s720x720/13932666_1397749103574148_4391608711361541993_n.png?oh=2d82be3a458d1ce9ac8fab47cdbc6e26&oe=585E6545",
-			"profilePicture": "https://scontent.xx.fbcdn.net/v/t1.0-1/p200x200/12049351_1300865083262551_8221231831784471629_n.jpg?oh=a30798841ad60dfe5cfabaa4e803c3ad&oe=5854DFB9",
-			"location": {
-				"city": "Brooklyn",
-				"country": "United States",
-				"latitude": 40.711217064583,
-				"longitude": -73.966384349735,
-				"state": "NY",
-				"street": "395 Wythe Ave",
-				"zip": "11249"
-			}
-		}
-	},
-	... 
-	],
-	"metadata": {
-		"venues": 1,
-		"venuesWithEvents": 1,
-		"events": 4
-	}
+  "events": [{
+    "id": "836655879846811",
+    "name": "U.S. Girls at Baby's All Right",
+    "type": "public",
+    "coverPicture": "https://scontent.xx.fbcdn.net/v/t31.0-8/s720x720/24883312_1521878931228093_3223523563973203944_o.jpg?oh=9bc3e5c5d45e39c542b057b92df95243&oe=5AC0353F",
+    "profilePicture": "https://scontent.xx.fbcdn.net/v/t1.0-0/c0.0.200.200/p200x200/24862268_1521878931228093_3223523563973203944_n.jpg?oh=23ec7dc943402ec7e0137f2d17f27719&oe=5AC246F8",
+    "description": "Friday, April 13th @ Baby's All Right\n\nAdHoc Presents\n\nU.S. Girls\n\nTickets:  http://ticketf.ly/2j7AegO\n\n| Baby's All Right |\n146 Broadway @ Bedford Ave | Williamsburg, Brooklyn \nJMZ-Marcy, L-Bedford, G-Broadway | 8pm | $12 | 21+\n\nCheck out our calendar and sign up for our mailing list http://adhocpresents.com/",
+    "distance": 89,
+    "startTime": "2018-04-13T20:00:00-0400",
+    "endTime": null,
+    "timeFromNow": 9982924,
+    "isCancelled": false,
+    "isDraft": false,
+    "category": "MUSIC_EVENT",
+    "ticketing": {
+      "ticket_uri": "http://ticketf.ly/2j7AegO"
+    },
+    "place": {
+      "id": "460616340718401",
+      "name": "Baby's All Right",
+      "location": {
+        "city": "Brooklyn",
+        "country": "United States",
+        "latitude": 40.71012,
+        "longitude": -73.96348,
+        "state": "NY",
+        "street": "146 Broadway",
+        "zip": "11211"
+      }
+    },
+    "stats": {
+      "attending": 20,
+      "declined": 0,
+      "maybe": 77,
+      "noreply": 6
+    },
+    "distances": {
+      "venue": 89,
+      "event": 89
+    },
+    "venue": {
+      "id": "460616340718401",
+      "name": "Baby's All Right",
+      "about": "babysallright@gmail.com",
+      "emails": ["babysallright@gmail.com"],
+      "coverPicture": "https://scontent.xx.fbcdn.net/v/t31.0-8/s720x720/20507438_1418517768261582_7945740169309872258_o.jpg?oh=24280a4732605e140c227db955c8d5e0&oe=5AC6B878",
+      "profilePicture": "https://scontent.xx.fbcdn.net/v/t1.0-1/p200x200/1480734_642185745894792_5820988503650852577_n.png?oh=c6e72b8a5645644e7dd3eb3d2161329f&oe=5AC0CD2D",
+      "category": "Bar",
+      "categoryList": ["Bar", "Breakfast & Brunch Restaurant", "Dance & Night Club"],
+      "location": {
+        "city": "Brooklyn",
+        "country": "United States",
+        "latitude": 40.71012,
+        "longitude": -73.96348,
+        "state": "NY",
+        "street": "146 Broadway",
+        "zip": "11211"
+      }
+    }
+  }],
+  "metadata": {
+    "venues": 100,
+    "venuesWithEvents": 2,
+    "events": 25
+  }
 }
 ```
